@@ -16,7 +16,7 @@ export type ModuleDef = {
   defaultName: string;
   icon: ReactNode;
 };
-...
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }

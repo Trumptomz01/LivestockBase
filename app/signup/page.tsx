@@ -27,52 +27,66 @@ export default function SignupPage() {
   const { toast, showToast } = useToast();
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  e.preventDefault();
+  setError("");
 
-    setError("");
+  if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+    setError("Please fill in all fields.");
+    return;
+  }
 
-    // Empty field validation
-    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
-      return;
-    }
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
 
-    // Password confirmation
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
+  setLoading(true);
 
-    setLoading(true);
+  const SIGNUP_TIMEOUT_MS = 10000;
+  const timeout = new Promise<"timeout">((resolve) =>
+    setTimeout(() => resolve("timeout"), SIGNUP_TIMEOUT_MS)
+  );
 
-    const { data, error } = await supabase.auth.signUp({
+  const result = await Promise.race([
+    supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
-        data: {
-          full_name: fullName.trim(),
-        },
-            
+        data: { full_name: fullName.trim() },
         emailRedirectTo: `${window.location.origin}/onboarding/modules?confirmed=true`,
-
       },
-    });
+    }),
+    timeout,
+  ]);
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
+  // Supabase took too long: stop waiting and send them to login
+  if (result === "timeout") {
+    showToast(
+      "This is taking longer than expected. If you receive a confirmation email, confirm it and then log in.",
+      "success"
+    );
+    setTimeout(() => router.push("/login"), 2500);
+    return;
+  }
 
-    // Account created successfully
-    if (data.user) {
-      showToast("Account successfully created! Check your email to confirm your account.", "success");
+  const { data, error } = result;
 
-      setTimeout(() => {
-        router.push("/login");
-      }, 2000);
-    }
-  };
+  if (error) {
+    setError(error.message);
+    setLoading(false);
+    return;
+  }
+
+  if (data.user) {
+    showToast("Account successfully created! Check your email to confirm your account.", "success");
+    setTimeout(() => router.push("/login"), 2000);
+    return;
+  }
+
+  // No error but no user came back either: don't leave the spinner running
+  setError("Something went wrong. Please try again.");
+  setLoading(false);
+};
 
   return (
     <>
