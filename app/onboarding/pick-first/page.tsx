@@ -2,12 +2,17 @@
 import { useRouter } from "next/navigation";
 import { useAppState, modules } from "@/lib/store";
 import { Tile } from "@/components/ui/Tile";
+import { useEffect } from "react";   
 
 export default function PickFirst() {
   const router = useRouter();
-  const { selectedModules, firstAnimalModule, setFirstAnimalModule } = useAppState();
+  const { selectedModules, firstAnimalModule, setFirstAnimalModule, syncStatus, onboardingCompleted } = useAppState();  
   const picked = selectedModules.length ? selectedModules : ["cattle" as const];
   const current = picked.includes(firstAnimalModule) ? firstAnimalModule : picked[0];
+
+  useEffect(() => {
+    if (syncStatus === "ready" && onboardingCompleted === true) router.replace("/dashboard");
+  }, [syncStatus, onboardingCompleted, router]);
 
   return (
     <div className="flex flex-col flex-1 pb-5">
@@ -29,10 +34,7 @@ export default function PickFirst() {
       </div>
       <div className="mt-auto pt-4">
         <button
-          onClick={() => {
-            setFirstAnimalModule(current);
-            router.push("/add-animal");
-          }}
+          onClick={() => router.push(`/add-animal?module=${current}`)}
           className="w-full py-4 cursor-pointer active:scale-98 transition-all rounded bg-primary text-on-primary font-bold text-[17px]"
         >
           Continue

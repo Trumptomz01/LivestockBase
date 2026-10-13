@@ -3,7 +3,7 @@ import type { Animal, AnimalEvent, LogType, ModuleId } from "@/lib/store";
 
 type EventRow = {
   id: string; animal_id: string; type: string; label: string;
-  when_label: "Today" | "Yesterday"; flag: boolean; created_at: string;
+  when_label: string; flag: boolean; created_at: string;
 };
 type AnimalRow = {
   id: string; farmer_id: string; module: ModuleId; name: string; age_label: string;

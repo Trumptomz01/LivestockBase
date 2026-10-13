@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppState, modules, moduleById, ModuleId } from "@/lib/store";
 import { TopBar } from "@/components/ui/TopBar";
-import { Card } from "@/components/ui/Card";
+import { AnimalListItem } from "@/components/AnimalListItem";
 import { IconPaths } from "@/components/ui/IconPaths";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -64,21 +64,9 @@ export default function AllAnimals() {
         {filtered.length} {filtered.length === 1 ? "animal" : "animals"}
       </div>
 
-      {filtered.map((a) => {
-        const m = moduleById(a.module);
-        return (
-          <Card
-            key={a.id}
-            icon={<IconPaths paths={m.iconPaths} className="w-[30px] h-[30px]" />}
-            title={a.name}
-            subtitle={a.lastFedWhen ? `Fed ${a.lastFedWhen.toLowerCase()}` : "No records yet"}
-            onClick={() => {
-              setCurrentAnimalId(a.id);
-              router.push(`/animals/${a.id}`);
-            }}
-          />
-        );
-      })}
+      {filtered.map((a) => (
+        <AnimalListItem key={a.id} animal={a} />
+      ))}
 
       {filtered.length === 0 && (
         <EmptyState

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TransferPrompt } from "@/components/TransferPrompt";
 import { AppStateProvider } from "../lib/store";
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AppStateProvider>
           <div className="max-w-105 mx-auto min-h-screen px-5 flex flex-col">{children}</div>
+          <TransferPrompt />
         </AppStateProvider>
       </body>
     </html>

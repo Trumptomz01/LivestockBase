@@ -20,7 +20,7 @@ export default function ChooseAnimal() {
         return (
           <Card
             key={a.id}
-            icon={<IconPaths paths={m.iconPaths} className="w-[30px] h-[30px]" />}
+            icon={<IconPaths paths={m.iconPaths} className="w-7.5 h-7.5" />}
             title={a.name}
             subtitle={a.lastFedWhen ? `Fed ${a.lastFedWhen.toLowerCase()}` : "No records yet"}
             onClick={() => {
