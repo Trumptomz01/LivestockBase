@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { SkipSetupButton } from "@/components/SkipSetupButton";
 
 
 export default function Welcome() {
@@ -24,6 +25,7 @@ export default function Welcome() {
         <button onClick={() => router.push("/login")} className=" cursor-pointer active:scale-98 transition-all hover:border hover rounded text-primary font-bold py-2">
           I already have an account
         </button>
+        <SkipSetupButton />
       </div>
     </div>
   );

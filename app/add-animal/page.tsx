@@ -5,6 +5,7 @@ import { useAppState, moduleById, modules, ModuleId } from "@/lib/store";
 import { TopBar } from "@/components/ui/TopBar";
 import { Chip } from "@/components/ui/Chip";
 import { IconPaths } from "@/components/ui/IconPaths";
+import { SkipSetupButton } from "@/components/SkipSetupButton";
 
 function AddAnimalInner() {
   const router = useRouter();
@@ -12,7 +13,7 @@ function AddAnimalInner() {
   const paramModule = params.get("module");
   const initialModule: ModuleId | null = modules.find((x) => x.id === paramModule)?.id ?? null;
 
-  const { addAnimal, selectedModules, addSelectedModule } = useAppState();
+  const { addAnimal, selectedModules, addSelectedModule, onboardingCompleted } = useAppState();
 
   const [step, setStep] = useState<0 | 1 | 2>(initialModule ? 1 : 0);
   const [moduleId, setModuleId] = useState<ModuleId | null>(initialModule);
@@ -111,6 +112,8 @@ function AddAnimalInner() {
           </div>
         </>
       )}
+        
+      {onboardingCompleted !== true && <SkipSetupButton />}
     </div>
   );
 }

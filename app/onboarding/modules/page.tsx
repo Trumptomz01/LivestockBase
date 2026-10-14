@@ -6,6 +6,8 @@ import { useAppState, modules } from "@/lib/store";
 import { Tile } from "@/components/ui/Tile";
 import { Toast } from "@/components/ui/Toast";
 import { useToast } from "@/lib/useToast";
+import { SkipSetupButton } from "@/components/SkipSetupButton";
+
 
 function ModulesInner() {
   const router = useRouter();
@@ -69,6 +71,9 @@ function ModulesInner() {
         >
           Continue
         </button>
+        <div className="pt-2">
+          <SkipSetupButton />
+        </div>
       </div>
     </div>
   );
