@@ -4,6 +4,7 @@ export type ProfileData = {
   selectedModules: ModuleId[];
   onboardingCompleted: boolean;
   animals: Animal[];
+  farmName: string | null;
 };
 
 // Fields on an animal that a log entry can change.
@@ -18,6 +19,7 @@ export interface Repository {
   saveSelectedModules(mods: ModuleId[]): Promise<void>;
   completeOnboarding(mods: ModuleId[]): Promise<void>;
   insertAnimal(a: Animal): Promise<void>;
+  saveFarmName(name: string): Promise<void>;
   updateAnimal(id: string, patch: { name?: string; ageLabel?: string }): Promise<void>;
   deleteAnimal(id: string): Promise<void>;
   markDeceased(id: string, cause: string, dateISO: string): Promise<void>;

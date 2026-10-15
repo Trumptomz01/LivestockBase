@@ -45,6 +45,7 @@ function AddAnimalInner() {
   return (
     <div className="flex flex-col flex-1 pb-5">
       <TopBar />
+      {onboardingCompleted !== true && <SkipSetupButton />}
       <div className="flex gap-2 justify-center mb-3">
         {dots.map((s) => (
           <span
@@ -113,7 +114,6 @@ function AddAnimalInner() {
         </>
       )}
         
-      {onboardingCompleted !== true && <SkipSetupButton />}
     </div>
   );
 }

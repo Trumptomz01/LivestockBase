@@ -10,10 +10,11 @@ export function createSupabaseRepo(supabase: SupabaseClient, userId: string): Re
       if (!farmer) farmer = await q.ensureFarmer(supabase, userId);
       const animals = await q.fetchAnimals(supabase, userId);
       const selectedModules: ModuleId[] = farmer.selected_modules?.length ? farmer.selected_modules : ["cattle"];
-      return { selectedModules, onboardingCompleted: farmer.onboarding_completed, animals };
+      return { selectedModules, onboardingCompleted: farmer.onboarding_completed, farmName: farmer.farm_name ?? null, animals };
     },
     saveSelectedModules: (mods) => q.saveSelectedModulesRow(supabase, userId, mods),
     completeOnboarding: (mods) => q.completeOnboardingRow(supabase, userId, mods),
+    saveFarmName: (name) => q.saveFarmNameRow(supabase, userId, name),
     insertAnimal: (a) => q.insertAnimal(supabase, userId, a),
     updateAnimal: (id, patch) =>
       q.updateAnimalRow(supabase, userId, id, {

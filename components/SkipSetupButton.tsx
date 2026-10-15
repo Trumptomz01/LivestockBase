@@ -22,11 +22,11 @@ export function SkipSetupButton() {
   }
 
   return (
-    <div className="text-center">
+    <div className="flex flex-col  items-end pt-3">
       <button
         onClick={skip}
         disabled={busy || syncStatus !== "ready"}
-        className="text-text-muted text-[15px] underline py-2 cursor-pointer disabled:opacity-60"
+        className="-mr-2 px-4 py-2 backdrop-blur-2xl hover:bg-surface text-sm text-text-muted hover:text-text text-[15px] bg-success-bg rounded-full font-bold cursor-pointer disabled:opacity-60"
       >
         {busy ? "Please wait..." : "Skip for now"}
       </button>

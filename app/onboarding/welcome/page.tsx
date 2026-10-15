@@ -7,6 +7,7 @@ export default function Welcome() {
   const router = useRouter();
   return (
     <div className="flex flex-col flex-1 pt-6 pb-5">
+        <SkipSetupButton />
       <div className="flex justify-center py-7">
         <svg width="180" height="120" viewBox="0 0 180 120" fill="none">
           <g stroke="var(--primary)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
@@ -25,7 +26,6 @@ export default function Welcome() {
         <button onClick={() => router.push("/login")} className=" cursor-pointer active:scale-98 transition-all hover:border hover rounded text-primary font-bold py-2">
           I already have an account
         </button>
-        <SkipSetupButton />
       </div>
     </div>
   );

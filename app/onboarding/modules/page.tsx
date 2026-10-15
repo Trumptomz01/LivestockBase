@@ -44,6 +44,7 @@ function ModulesInner() {
   return (
     <div className="flex flex-col flex-1 pb-5">
       {toast && <Toast message={toast.message} type={toast.type} />}
+      <SkipSetupButton />
 
       <div style={{ flexGrow: 0.15 }} />
 
@@ -71,9 +72,6 @@ function ModulesInner() {
         >
           Continue
         </button>
-        <div className="pt-2">
-          <SkipSetupButton />
-        </div>
       </div>
     </div>
   );

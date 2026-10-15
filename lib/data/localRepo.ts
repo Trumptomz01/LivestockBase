@@ -11,9 +11,10 @@ export type LocalState = {
   selectedModules: ModuleId[];
   onboardingCompleted: boolean;
   animals: LocalAnimal[];
+  farmName?: string | null;
 };
 
-const emptyState = (): LocalState => ({ selectedModules: ["cattle"], onboardingCompleted: false, animals: [] });
+const emptyState = (): LocalState => ({ selectedModules: ["cattle"], onboardingCompleted: false, animals: [], farmName: null });
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -104,6 +105,7 @@ export function createLocalRepo(): Repository {
         selectedModules: s.selectedModules,
         onboardingCompleted: s.onboardingCompleted,
         animals: s.animals.map(toAnimal),
+        farmName: s.farmName ?? null
       };
     },
     saveSelectedModules: (mods) =>
@@ -114,6 +116,10 @@ export function createLocalRepo(): Repository {
       mutate((s) => {
         s.selectedModules = mods;
         s.onboardingCompleted = true;
+      }),
+    saveFarmName: (name) =>
+      mutate((s) => {
+         s.farmName = name;
       }),
     insertAnimal: (a) =>
       mutate((s) => {

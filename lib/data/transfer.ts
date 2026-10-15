@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ModuleId } from "@/lib/store";
-import { saveSelectedModulesRow, completeOnboardingRow } from "@/lib/supabase/queries";
+import { saveSelectedModulesRow, completeOnboardingRow, saveFarmNameRow } from "@/lib/supabase/queries";
 import type { LocalState } from "./localRepo";
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -23,7 +23,7 @@ export async function uploadSnapshot(
   supabase: SupabaseClient,
   userId: string,
   snap: LocalState,
-  cloud: { selectedModules: ModuleId[]; onboardingCompleted: boolean }
+  cloud: { selectedModules: ModuleId[]; onboardingCompleted: boolean; farmName: string | null }
 ): Promise<void> {
   const animalRows = snap.animals.map((a) => ({
     id: a.id,
@@ -69,6 +69,8 @@ export async function uploadSnapshot(
   if (animalsFound !== animalRows.length) throw new Error("Some animals did not upload");
   const eventsFound = await countExisting(supabase, "animal_events", eventRows.map((r) => r.id));
   if (eventsFound !== eventRows.length) throw new Error("Some records did not upload");
+  
+  if (!cloud.farmName && snap.farmName) await saveFarmNameRow(supabase, userId, snap.farmName);
 
   const mods = Array.from(new Set<ModuleId>([...cloud.selectedModules, ...snap.selectedModules]));
   if (cloud.onboardingCompleted || snap.onboardingCompleted || snap.animals.length > 0) {

@@ -1,9 +1,10 @@
 "use client";
-import { createLocalRepo, readLocalSnapshot, clearLocalData } from "@/lib/data/localRepo";
-import { uploadSnapshot } from "@/lib/data/transfer";
+
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createSupabaseRepo } from "@/lib/data/supabaseRepo";
+import { createLocalRepo, readLocalSnapshot, clearLocalData } from "@/lib/data/localRepo";
+import { uploadSnapshot } from "@/lib/data/transfer";
 import type { AnimalStatePatch, Repository } from "@/lib/data/repository";
 
 // ---- Domain types ----
@@ -144,6 +145,7 @@ type StoredState = {
   activeModule: ModuleId;
   selectedModules: ModuleId[];
   onboardingCompleted: boolean;
+  farmName?: string | null;
 };
 const STORAGE_KEY = "hb360-state";
 
@@ -173,6 +175,7 @@ export type SyncStatus = "loading" | "signed-out" | "ready" | "error";
 
 type AppState = {
   animals: Animal[];
+  farmName: string | null;
   activeModule: ModuleId;
   selectedModules: ModuleId[];
   firstAnimalModule: ModuleId;
@@ -187,6 +190,7 @@ type AppState = {
   syncStatus: SyncStatus; // auth + farmer + animals resolved?
   onboardingCompleted: boolean | null; // from farmers.onboarding_completed
   syncError: string | null;
+  updateFarmName: (name: string) => Promise<boolean>;
   updateFarmerName: (name: string) => Promise<boolean>;
   acceptTransfer: () => Promise<boolean>;
   discardTransfer: () => Promise<boolean>;
@@ -234,6 +238,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [farmerName, setFarmerName] = useState<string | null>(null);
+  const [farmName, setFarmName] = useState<string | null>(null);
   const [lastSavedMessage, setLastSavedMessage] = useState("");
   const [pendingTransfer, setPendingTransfer] = useState<{ animalCount: number } | null>(null);
 
@@ -256,6 +261,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setFarmerId(null);
     setRepo(null);
     setFarmerName(null);
+    setFarmName(null);
     setIsSignedIn(false);
     setOnboardingCompleted(null);
     setPendingTransfer(null);
@@ -272,35 +278,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       localModeRef.current = false;
       const remote = createSupabaseRepo(supabase, userId);
       try {
-      let data = await remote.load();
+        let data = await remote.load();
 
-      // Did this person add animals on this phone before logging in?
-      let pending: { animalCount: number } | null = null;
-      const snap = await readLocalSnapshot().catch(() => null);
-      if (snap && snap.animals.length > 0) {
-        if (data.animals.length === 0) {
-          // The account is empty, so nothing can clash: move the phone's records in.
-          try {
-            await uploadSnapshot(supabase, userId, snap, {
-              selectedModules: data.selectedModules,
-              onboardingCompleted: data.onboardingCompleted,
-            });
-            await clearLocalData();
-            data = await remote.load();
-         } catch (err) {
-            console.error("auto transfer failed:", err);
-            setSyncError("We couldn't move your records into your account. They are still safe on this phone.");
+        // Did this person add animals on this phone before logging in?
+        let pending: { animalCount: number } | null = null;
+        const snap = await readLocalSnapshot().catch(() => null);
+        if (snap && snap.animals.length > 0) {
+          if (data.animals.length === 0) {
+            // The account is empty, so nothing can clash: move the phone's records in.
+            try {
+              await uploadSnapshot(supabase, userId, snap, {
+                selectedModules: data.selectedModules,
+                onboardingCompleted: data.onboardingCompleted,
+                farmName: data.farmName,
+              });
+              await clearLocalData();
+              data = await remote.load();
+            } catch (err) {
+              console.error("auto transfer failed:", err);
+              setSyncError("We couldn't move your records into your account. They are still safe on this phone.");
+            }
+          } else {
+            pending = { animalCount: snap.animals.length }; // account has animals: ask first
           }
-        } else {
-          pending = { animalCount: snap.animals.length }; // account has animals: ask first
         }
-      }
-      const mods = data.selectedModules;
+
+        const mods = data.selectedModules;
         const cached = loadStored();
         const preferred = cached?.userId === userId ? cached.activeModule : undefined;
         const { data: authData } = await supabase.auth.getUser();
 
         setFarmerName(authData.user?.user_metadata?.full_name ?? null);
+        setFarmName(data.farmName);
         setFarmerId(userId);
         setRepo(remote);
         setPendingTransfer(pending);
@@ -317,6 +326,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           // Couldn't reach Supabase: fall back to this user's own cache.
           setFarmerId(userId);
           setRepo(remote);
+          setIsSignedIn(true);
+          setFarmName(cached.farmName ?? null);
           setOnboardingCompleted(cached.onboardingCompleted);
           setAnimals(cached.animals);
           setSelectedModules(cached.selectedModules?.length ? cached.selectedModules : ["cattle"]);
@@ -331,23 +342,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const loadLocal = useCallback(async () => {
-  localModeRef.current = true;
-  setSyncStatus("loading");
-  try {
-    const data = await createLocalRepo().load();
-    setFarmerId(null);
-    setIsSignedIn(false);
-    setRepo(createLocalRepo());
-    setFarmerName(null);
-    setOnboardingCompleted(data.onboardingCompleted);
-    setAnimals(data.animals);
-    setSelectedModules(data.selectedModules);
-    setActiveModuleState(data.selectedModules[0]);
-    setSyncStatus("ready");
-  } catch {
-    setSyncStatus("error");
-  }
-}, []);
+    localModeRef.current = true;
+    setSyncStatus("loading");
+    try {
+      const data = await createLocalRepo().load();
+      setFarmerId(null);
+      setIsSignedIn(false);
+      setRepo(createLocalRepo());
+      setFarmerName(null);
+      setFarmName(data.farmName);
+      setOnboardingCompleted(data.onboardingCompleted);
+      setAnimals(data.animals);
+      setSelectedModules(data.selectedModules);
+      setActiveModuleState(data.selectedModules[0]);
+      setSyncStatus("ready");
+    } catch {
+      setSyncStatus("error");
+    }
+  }, []);
 
   // Online/offline listeners (client only).
   useEffect(() => {
@@ -365,37 +377,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   // Auth -> data. Supabase decides who the user is; we then load THEIR rows.
   useEffect(() => {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_OUT") {
-      loadedUserRef.current = null;
-      resetLocal();
-      void loadLocal();
-      return;
-    }
-    if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
-      const uid = session?.user?.id;
-      if (!uid) {
-        if (event === "INITIAL_SESSION" && !localModeRef.current) void loadLocal();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        loadedUserRef.current = null;
+        resetLocal();
+        void loadLocal();
         return;
       }
-      if (loadedUserRef.current === uid) return;
-      if (loadedUserRef.current || localModeRef.current) resetLocal();
-      loadedUserRef.current = uid;
-      setTimeout(() => {
-        void loadRemote(uid);
-      }, 0);
-    }
-  });
-  return () => subscription.unsubscribe();
-}, [supabase, loadRemote, loadLocal, resetLocal]);
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        const uid = session?.user?.id;
+        if (!uid) {
+          if (event === "INITIAL_SESSION" && !localModeRef.current) void loadLocal();
+          return;
+        }
+        if (loadedUserRef.current === uid) return; // e.g. SIGNED_IN re-fired on tab focus
+        if (loadedUserRef.current || localModeRef.current) resetLocal(); // different user, never show old data
+        loadedUserRef.current = uid;
+        // Don't await Supabase calls inside this callback (can deadlock the auth lock).
+        setTimeout(() => {
+          void loadRemote(uid);
+        }, 0);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase, loadRemote, loadLocal, resetLocal]);
 
   // Cache write: one effect, no setState inside, so no update loop.
   useEffect(() => {
     if (syncStatus !== "ready" || !farmerId || onboardingCompleted === null) return;
-    saveStored({ userId: farmerId, animals, activeModule, selectedModules, onboardingCompleted });
-  }, [syncStatus, farmerId, animals, activeModule, selectedModules, onboardingCompleted]);
+    saveStored({ userId: farmerId, animals, activeModule, selectedModules, onboardingCompleted, farmName });
+  }, [syncStatus, farmerId, animals, activeModule, selectedModules, onboardingCompleted, farmName]);
 
   function retrySync() {
     supabase.auth.getSession().then(({ data }) => {
@@ -431,6 +444,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
+  async function updateFarmName(name: string): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean || !repo) return false;
+    const before = farmName;
+    setFarmName(clean);
+    try {
+      await repo.saveFarmName(clean);
+      return true;
+    } catch {
+      setFarmName(before);
+      return false;
+    }
+  }
+
   function addAnimal(name: string, module: ModuleId, ageLabel: string): Animal {
     const animal: Animal = {
       id: crypto.randomUUID(),
@@ -463,22 +490,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }
 
   async function acceptTransfer(): Promise<boolean> {
-  if (!farmerId) return false;
-  try {
-    const snap = await readLocalSnapshot();
-    await uploadSnapshot(supabase, farmerId, snap, {
-      selectedModules,
-      onboardingCompleted: onboardingCompleted === true,
-    });
-    await clearLocalData();
-    setPendingTransfer(null);
-    await loadRemote(farmerId); // refresh so the added animals appear
-    return true;
-  } catch (err) {
-    console.error("transfer failed:", err);
-    return false; // phone records are untouched; the prompt stays
+    if (!farmerId) return false;
+    try {
+      const snap = await readLocalSnapshot();
+      await uploadSnapshot(supabase, farmerId, snap, {
+        selectedModules,
+        onboardingCompleted: onboardingCompleted === true,
+        farmName,
+      });
+      await clearLocalData();
+      setPendingTransfer(null);
+      await loadRemote(farmerId); // refresh so the added animals appear
+      return true;
+    } catch (err) {
+      console.error("transfer failed:", err);
+      return false; // phone records are untouched; the prompt stays
+    }
   }
-}
 
   async function discardTransfer(): Promise<boolean> {
     try {
@@ -489,6 +517,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return false;
     }
   }
+
   async function addSelectedModule(id: ModuleId): Promise<boolean> {
     if (selectedModules.includes(id)) return true; // already have it
     const next = [...selectedModules, id];
@@ -679,7 +708,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return animals.find((a) => a.id === id);
   }
   function attentionList() {
-      return animals.filter((a) => a.attentionFlag && a.status === "active");
+    return animals.filter((a) => a.attentionFlag && a.status === "active");
   }
   function todayCounts() {
     const today = todayISO();
@@ -692,10 +721,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const value: AppState = {
     animals,
+    farmName,
     activeModule,
     selectedModules,
     firstAnimalModule,
-    pendingTransfer, 
+    pendingTransfer,
     currentAnimalId,
     isOnline,
     isReturningUser: onboardingCompleted === true,
@@ -706,8 +736,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     syncStatus,
     onboardingCompleted,
     syncError,
+    updateFarmName,
     updateFarmerName,
-    acceptTransfer, discardTransfer,
+    acceptTransfer,
+    discardTransfer,
     markDeceased,
     deleteEvent,
     addSelectedModule,

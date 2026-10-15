@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useAppState, modules } from "@/lib/store";
 import { Tile } from "@/components/ui/Tile";
 import { useEffect } from "react";   
+import { SkipSetupButton } from "@/components/SkipSetupButton";
 
 export default function PickFirst() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function PickFirst() {
 
   return (
     <div className="flex flex-col flex-1 pb-5">
+        <SkipSetupButton />
       <div style={{ flexGrow: 0.15 }} />
       <h1 className="text-2xl font-bold mb-2">Which one should we add first?</h1>
       <p>You picked more than one — let&apos;s start with just one, then add the rest after.</p>
