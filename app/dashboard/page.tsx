@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Toast } from "@/components/ui/Toast";
 
 const NUDGE_KEY = "hb360-signup-nudge-dismissed";
-const NUDGE_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // hidden for 7 days after "Not now"
+const NUDGE_SNOOZE_MS = 5 * 24 * 60 * 60 * 1000; 
 
 export default function Dashboard() {
   const router = useRouter();
@@ -122,7 +122,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col flex-1 pb-5">
-      <div className="flex items-center justify-between py-4 -mx-1 px-1">
+      <div className="flex items-end justify-end-safe py-4 -mx-1 px-1">
         <button
           type="button"
           onClick={() => router.push("/settings")}

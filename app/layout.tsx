@@ -1,29 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { TransferPrompt } from "@/components/TransferPrompt";
+import { SerwistProvider } from "@serwist/turbopack/react";
 import { AppStateProvider } from "../lib/store";
+import { TransferPrompt } from "@/components/TransferPrompt";
 import { BottomNav } from "../components/ButtonNav";
 import "./globals.css";
 
-// 1. Add Viewport export for notch coverage
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-  themeColor: "#000000", // Adjust this to match your app's header color
-};
-
-// 2. Add manifest and appleWebApp settings to Metadata
 export const metadata: Metadata = {
-  title: "AnimalBase",
+  applicationName: "HerdBase360",
+  title: "HerdBase360",
   description: "Know your farm, every day.",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "AnimalBase",
-  },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "HerdBase" },
+  formatDetection: { telephone: false },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#151a15",
+};
+
+// Runs before paint so there's no light/dark flash on load.
+// Reads a saved preference first, falls back to the device's setting.
 const themeInitScript = `
 (function () {
   try {
@@ -48,14 +44,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        <AppStateProvider>
-          {/* 3. Changed min-h-screen to min-h-[100dvh] to prevent URL bar jumpiness */}
-          <div className="max-w-105 mx-auto min-h-[100dvh] px-5 flex flex-col">
-            {children}
-            <BottomNav />
-          </div>
-          <TransferPrompt />
-        </AppStateProvider>
+        <SerwistProvider swUrl="/serwist/sw.js">
+          <AppStateProvider>
+            <div className="max-w-105 mx-auto min-h-screen px-5 flex flex-col">
+              {children}
+              <BottomNav />
+            </div>
+            <TransferPrompt />
+          </AppStateProvider>
+        </SerwistProvider>
       </body>
     </html>
   );
