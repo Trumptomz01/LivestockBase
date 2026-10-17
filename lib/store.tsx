@@ -2,8 +2,10 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
-import * as q from "@/lib/supabase/queries";
-
+import { createSupabaseRepo } from "@/lib/data/supabaseRepo";
+import { createLocalRepo, readLocalSnapshot, clearLocalData } from "@/lib/data/localRepo";
+import { uploadSnapshot } from "@/lib/data/transfer";
+import type { AnimalStatePatch, Repository } from "@/lib/data/repository";
 
 // ---- Domain types ----
 export type ModuleId = "cattle" | "goat" | "sheep" | "fish" | "poultry";
@@ -55,7 +57,7 @@ export type Animal = {
   events: AnimalEvent[];
   status: "active" | "deceased";
   deathCause: string | null;
-  deathDate: string | null; 
+  deathDate: string | null;
 };
 
 export type LogType = "feeding" | "health" | "breeding" | "weight";
@@ -143,6 +145,7 @@ type StoredState = {
   activeModule: ModuleId;
   selectedModules: ModuleId[];
   onboardingCompleted: boolean;
+  farmName?: string | null;
 };
 const STORAGE_KEY = "hb360-state";
 
@@ -172,11 +175,14 @@ export type SyncStatus = "loading" | "signed-out" | "ready" | "error";
 
 type AppState = {
   animals: Animal[];
+  farmName: string | null;
   activeModule: ModuleId;
   selectedModules: ModuleId[];
   firstAnimalModule: ModuleId;
   currentAnimalId: string | null;
   isOnline: boolean;
+  isSignedIn: boolean;
+  pendingTransfer: { animalCount: number } | null;
   isReturningUser: boolean;
   hydrated: boolean; // client mounted
   farmerName: string | null;
@@ -184,6 +190,10 @@ type AppState = {
   syncStatus: SyncStatus; // auth + farmer + animals resolved?
   onboardingCompleted: boolean | null; // from farmers.onboarding_completed
   syncError: string | null;
+  updateFarmName: (name: string) => Promise<boolean>;
+  updateFarmerName: (name: string) => Promise<boolean>;
+  acceptTransfer: () => Promise<boolean>;
+  discardTransfer: () => Promise<boolean>;
   markDeceased: (id: string, cause: string, dateISO: string) => Promise<boolean>;
   deleteEvent: (animalId: string, eventId: string) => void;
   clearSyncError: () => void;
@@ -195,7 +205,7 @@ type AppState = {
   setCurrentAnimalId: (id: string | null) => void;
   setLastSavedMessage: (msg: string) => void;
   addAnimal: (name: string, module: ModuleId, ageLabel: string) => Animal;
-  updateAnimal: (id: string, patch: { name?: string; ageLabel?: string }) => void;
+  updateAnimal: (id: string, patch: { name?: string; ageLabel?: string }) => Promise<boolean>;
   deleteAnimal: (id: string) => void;
   logEvent: (
     animalId: string,
@@ -218,7 +228,8 @@ const AppContext = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [supabase] = useState(() => createClient());
-
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const localModeRef = useRef(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [activeModule, setActiveModuleState] = useState<ModuleId>("cattle");
   const [selectedModules, setSelectedModules] = useState<ModuleId[]>(["cattle"]);
@@ -227,9 +238,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [farmerName, setFarmerName] = useState<string | null>(null);
+  const [farmName, setFarmName] = useState<string | null>(null);
   const [lastSavedMessage, setLastSavedMessage] = useState("");
+  const [pendingTransfer, setPendingTransfer] = useState<{ animalCount: number } | null>(null);
 
-  const [farmerId, setFarmerId] = useState<string | null>(null);
+  const [farmerId, setFarmerId] = useState<string | null>(null); // used to key the offline cache
+  const [repo, setRepo] = useState<Repository | null>(null); // where reads/writes actually go
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -245,8 +259,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const resetLocal = useCallback(() => {
     setAnimals([]);
     setFarmerId(null);
+    setRepo(null);
     setFarmerName(null);
+    setFarmName(null);
+    setIsSignedIn(false);
     setOnboardingCompleted(null);
+    setPendingTransfer(null);
     setSelectedModules(["cattle"]);
     setActiveModuleState("cattle");
     setCurrentAnimalIdState(null);
@@ -257,22 +275,47 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const loadRemote = useCallback(
     async (userId: string) => {
       setSyncStatus("loading");
+      localModeRef.current = false;
+      const remote = createSupabaseRepo(supabase, userId);
       try {
-          let farmer = await q.fetchFarmer(supabase, userId);
-          if (!farmer) {
-            farmer = await q.ensureFarmer(supabase, userId);
+        let data = await remote.load();
+
+        // Did this person add animals on this phone before logging in?
+        let pending: { animalCount: number } | null = null;
+        const snap = await readLocalSnapshot().catch(() => null);
+        if (snap && snap.animals.length > 0) {
+          if (data.animals.length === 0) {
+            // The account is empty, so nothing can clash: move the phone's records in.
+            try {
+              await uploadSnapshot(supabase, userId, snap, {
+                selectedModules: data.selectedModules,
+                onboardingCompleted: data.onboardingCompleted,
+                farmName: data.farmName,
+              });
+              await clearLocalData();
+              data = await remote.load();
+            } catch (err) {
+              console.error("auto transfer failed:", err);
+              setSyncError("We couldn't move your records into your account. They are still safe on this phone.");
+            }
+          } else {
+            pending = { animalCount: snap.animals.length }; // account has animals: ask first
           }
-          const remoteAnimals = await q.fetchAnimals(supabase, userId);
-        
-        const mods: ModuleId[] = farmer.selected_modules?.length ? farmer.selected_modules : ["cattle"];
+        }
+
+        const mods = data.selectedModules;
         const cached = loadStored();
         const preferred = cached?.userId === userId ? cached.activeModule : undefined;
         const { data: authData } = await supabase.auth.getUser();
-        
+
         setFarmerName(authData.user?.user_metadata?.full_name ?? null);
+        setFarmName(data.farmName);
         setFarmerId(userId);
-        setOnboardingCompleted(farmer.onboarding_completed);
-        setAnimals(remoteAnimals);
+        setRepo(remote);
+        setPendingTransfer(pending);
+        setIsSignedIn(true);
+        setOnboardingCompleted(data.onboardingCompleted);
+        setAnimals(data.animals);
         setSelectedModules(mods);
         setActiveModuleState(preferred && mods.includes(preferred) ? preferred : mods[0]);
         setSyncStatus("ready");
@@ -282,6 +325,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         if (cached && cached.userId === userId) {
           // Couldn't reach Supabase: fall back to this user's own cache.
           setFarmerId(userId);
+          setRepo(remote);
+          setIsSignedIn(true);
+          setFarmName(cached.farmName ?? null);
           setOnboardingCompleted(cached.onboardingCompleted);
           setAnimals(cached.animals);
           setSelectedModules(cached.selectedModules?.length ? cached.selectedModules : ["cattle"]);
@@ -294,6 +340,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     },
     [supabase]
   );
+
+  const loadLocal = useCallback(async () => {
+    localModeRef.current = true;
+    setSyncStatus("loading");
+    try {
+      const data = await createLocalRepo().load();
+      setFarmerId(null);
+      setIsSignedIn(false);
+      setRepo(createLocalRepo());
+      setFarmerName(null);
+      setFarmName(data.farmName);
+      setOnboardingCompleted(data.onboardingCompleted);
+      setAnimals(data.animals);
+      setSelectedModules(data.selectedModules);
+      setActiveModuleState(data.selectedModules[0]);
+      setSyncStatus("ready");
+    } catch {
+      setSyncStatus("error");
+    }
+  }, []);
 
   // Online/offline listeners (client only).
   useEffect(() => {
@@ -317,17 +383,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (event === "SIGNED_OUT") {
         loadedUserRef.current = null;
         resetLocal();
-        setSyncStatus("signed-out");
+        void loadLocal();
         return;
       }
       if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
         const uid = session?.user?.id;
         if (!uid) {
-          setSyncStatus("signed-out");
+          if (event === "INITIAL_SESSION" && !localModeRef.current) void loadLocal();
           return;
         }
         if (loadedUserRef.current === uid) return; // e.g. SIGNED_IN re-fired on tab focus
-        if (loadedUserRef.current) resetLocal(); // different user, never show old data
+        if (loadedUserRef.current || localModeRef.current) resetLocal(); // different user, never show old data
         loadedUserRef.current = uid;
         // Don't await Supabase calls inside this callback (can deadlock the auth lock).
         setTimeout(() => {
@@ -336,19 +402,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
     });
     return () => subscription.unsubscribe();
-  }, [supabase, loadRemote, resetLocal]);
+  }, [supabase, loadRemote, loadLocal, resetLocal]);
 
   // Cache write: one effect, no setState inside, so no update loop.
   useEffect(() => {
     if (syncStatus !== "ready" || !farmerId || onboardingCompleted === null) return;
-    saveStored({ userId: farmerId, animals, activeModule, selectedModules, onboardingCompleted });
-  }, [syncStatus, farmerId, animals, activeModule, selectedModules, onboardingCompleted]);
+    saveStored({ userId: farmerId, animals, activeModule, selectedModules, onboardingCompleted, farmName });
+  }, [syncStatus, farmerId, animals, activeModule, selectedModules, onboardingCompleted, farmName]);
 
   function retrySync() {
     supabase.auth.getSession().then(({ data }) => {
       const uid = data.session?.user?.id;
       if (!uid) {
-        setSyncStatus("signed-out");
+        void loadLocal();
         return;
       }
       loadedUserRef.current = uid;
@@ -369,6 +435,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setCurrentAnimalIdState(id);
   }
 
+  async function updateFarmerName(name: string): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean) return false;
+    const { error } = await supabase.auth.updateUser({ data: { full_name: clean } });
+    if (error) return false;
+    setFarmerName(clean);
+    return true;
+  }
+
+  async function updateFarmName(name: string): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean || !repo) return false;
+    const before = farmName;
+    setFarmName(clean);
+    try {
+      await repo.saveFarmName(clean);
+      return true;
+    } catch {
+      setFarmName(before);
+      return false;
+    }
+  }
+
   function addAnimal(name: string, module: ModuleId, ageLabel: string): Animal {
     const animal: Animal = {
       id: crypto.randomUUID(),
@@ -382,7 +471,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       events: [],
       status: "active",
       deathCause: null,
-      deathDate: null
+      deathDate: null,
     };
     setAnimals((prev) => [...prev, animal]); // functional: safe when called several times in a row
     setActiveModuleState(module);
@@ -392,22 +481,50 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setAnimals((prev) => prev.filter((a) => a.id !== animal.id));
       setSyncError(`Could not save ${name}. Check your connection and try again.`);
     };
-    if (!farmerId) {
+    if (!repo) {
       rollback();
       return animal;
     }
-    enqueue(() => q.insertAnimal(supabase, farmerId, animal), rollback);
+    enqueue(() => repo.insertAnimal(animal), rollback);
     return animal;
+  }
+
+  async function acceptTransfer(): Promise<boolean> {
+    if (!farmerId) return false;
+    try {
+      const snap = await readLocalSnapshot();
+      await uploadSnapshot(supabase, farmerId, snap, {
+        selectedModules,
+        onboardingCompleted: onboardingCompleted === true,
+        farmName,
+      });
+      await clearLocalData();
+      setPendingTransfer(null);
+      await loadRemote(farmerId); // refresh so the added animals appear
+      return true;
+    } catch (err) {
+      console.error("transfer failed:", err);
+      return false; // phone records are untouched; the prompt stays
+    }
+  }
+
+  async function discardTransfer(): Promise<boolean> {
+    try {
+      await clearLocalData();
+      setPendingTransfer(null);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function addSelectedModule(id: ModuleId): Promise<boolean> {
     if (selectedModules.includes(id)) return true; // already have it
     const next = [...selectedModules, id];
     setSelectedModules(next);
-    console.log("addSelectedModule called", { id, farmerId, selectedModules });
-    if (!farmerId) return false;
+    if (!repo) return false;
     try {
-      await q.saveSelectedModulesRow(supabase, farmerId, next);
+      await repo.saveSelectedModules(next);
       return true;
     } catch {
       setSelectedModules(selectedModules); // rollback
@@ -418,7 +535,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   async function updateAnimal(id: string, patch: { name?: string; ageLabel?: string }): Promise<boolean> {
     const before = animals.find((a) => a.id === id);
-    if (!before || !farmerId) return false;
+    if (!before || !repo) return false;
 
     setAnimals((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
 
@@ -431,12 +548,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     // Chain onto the same queue as everything else (so ordering with animal
     // inserts/events is preserved), but keep a handle we can actually await.
-    const task = queueRef.current.then(() =>
-      q.updateAnimalRow(supabase, farmerId, id, {
-        ...(patch.name !== undefined && { name: patch.name }),
-        ...(patch.ageLabel !== undefined && { age_label: patch.ageLabel }),
-      })
-    );
+    const task = queueRef.current.then(() => repo.updateAnimal(id, patch));
     queueRef.current = task.catch(() => {}); // keep the shared queue alive even if this write fails
 
     try {
@@ -447,40 +559,40 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return false;
     }
   }
-// for dead anials
+
   async function markDeceased(id: string, cause: string, dateISO: string): Promise<boolean> {
-  const before = animals.find((a) => a.id === id);
-  if (!before || !farmerId) return false;
+    const before = animals.find((a) => a.id === id);
+    if (!before || !repo) return false;
 
-  setAnimals((prev) =>
-    prev.map((a) => (a.id === id ? { ...a, status: "deceased", deathCause: cause, deathDate: dateISO } : a))
-  );
-
-  try {
-    await q.markAnimalDeceasedRow(supabase, farmerId, id, cause, dateISO);
-    return true;
-  } catch {
     setAnimals((prev) =>
-      prev.map((a) =>
-        a.id === id ? { ...a, status: before.status, deathCause: before.deathCause, deathDate: before.deathDate } : a
-      )
+      prev.map((a) => (a.id === id ? { ...a, status: "deceased", deathCause: cause, deathDate: dateISO } : a))
     );
-    setSyncError("Could not save this. Please try again.");
-    return false;
-  }
-}
 
-    function deleteEvent(animalId: string, eventId: string) {
+    try {
+      await repo.markDeceased(id, cause, dateISO);
+      return true;
+    } catch {
+      setAnimals((prev) =>
+        prev.map((a) =>
+          a.id === id ? { ...a, status: before.status, deathCause: before.deathCause, deathDate: before.deathDate } : a
+        )
+      );
+      setSyncError("Could not save this. Please try again.");
+      return false;
+    }
+  }
+
+  function deleteEvent(animalId: string, eventId: string) {
     const animal = animals.find((a) => a.id === animalId);
     const before = animal?.events.find((e) => e.id === eventId);
-    if (!before || !farmerId) return;
+    if (!before || !repo) return;
 
     setAnimals((prev) =>
       prev.map((a) => (a.id === animalId ? { ...a, events: a.events.filter((e) => e.id !== eventId) } : a))
     );
 
     enqueue(
-      () => q.deleteEventRow(supabase, farmerId, eventId),
+      () => repo.deleteEvent(eventId),
       () => {
         setAnimals((prev) =>
           prev.map((a) =>
@@ -493,13 +605,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
     );
   }
+
   function deleteAnimal(id: string) {
     const before = animals.find((a) => a.id === id);
-    if (!before || !farmerId) return;
+    if (!before || !repo) return;
     setAnimals((prev) => prev.filter((a) => a.id !== id));
     if (currentAnimalId === id) setCurrentAnimalIdState(null);
     enqueue(
-      () => q.deleteAnimalRow(supabase, farmerId, id),
+      () => repo.deleteAnimal(id),
       () => {
         setAnimals((prev) => (prev.some((a) => a.id === id) ? prev : [...prev, before]));
         setSyncError(`Could not delete ${before.name}. Please try again.`);
@@ -512,7 +625,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     type: LogType,
     primary: string | null,
     amount: number | null,
-    when: string,
+    when: string
   ): AnimalEvent {
     const cfg = logTypeConfig[type];
     const label = cfg.eventLabel(primary, amount);
@@ -520,11 +633,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const event: AnimalEvent = { id: crypto.randomUUID(), label, when, flag: isFlag };
     const before = animals.find((a) => a.id === animalId);
 
-    const patch: { last_fed_when?: string; last_check_when?: string; attention_flag?: boolean } = {};
-    if (type === "feeding") patch.last_fed_when = when;
+    const patch: AnimalStatePatch = {};
+    if (type === "feeding") patch.lastFedWhen = when;
     if (type === "health") {
-      patch.last_check_when = when;
-      patch.attention_flag = isFlag;
+      patch.lastCheckWhen = when;
+      patch.attentionFlag = isFlag;
     }
 
     setAnimals((prev) =>
@@ -556,18 +669,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       );
       setSyncError("Could not save this record. Please try again.");
     };
-    if (!farmerId) {
+    if (!repo) {
       rollback();
       return event;
     }
-    enqueue(() => q.insertEventAndUpdateAnimal(supabase, farmerId, animalId, type, event, patch), rollback);
+    enqueue(() => repo.insertEvent(animalId, type, event, patch), rollback);
     return event;
   }
 
   async function saveSelectedModules(): Promise<boolean> {
-    if (!farmerId) return false;
+    if (!repo) return false;
     try {
-      await q.saveSelectedModulesRow(supabase, farmerId, selectedModules);
+      await repo.saveSelectedModules(selectedModules);
       return true;
     } catch {
       setSyncError("Could not save your choices. Please try again.");
@@ -576,10 +689,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }
 
   async function completeOnboarding(): Promise<boolean> {
-    if (!farmerId) return false;
+    if (!repo) return false;
     try {
       await queueRef.current; // let pending animal inserts finish first
-      await q.completeOnboardingRow(supabase, farmerId, selectedModules);
+      await repo.completeOnboarding(selectedModules);
       setOnboardingCompleted(true);
       return true;
     } catch {
@@ -595,31 +708,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return animals.find((a) => a.id === id);
   }
   function attentionList() {
-    return animals.filter((a) => a.attentionFlag);
+    return animals.filter((a) => a.attentionFlag && a.status === "active");
   }
   function todayCounts() {
     const today = todayISO();
     const fed = animals.filter((a) => a.events.some((e) => e.label.startsWith("Fed") && e.when === today)).length;
     const health = animals.filter((a) => a.events.some((e) => e.label.startsWith("Health check") && e.when === today)).length;
-    const attention = animals.filter((a) => a.attentionFlag).length;
+    const attention = animals.filter((a) => a.attentionFlag && a.status === "active").length;
     const newToday = animals.filter((a) => a.addedToday).length;
     return { fed, health, attention, newToday };
   }
 
   const value: AppState = {
     animals,
+    farmName,
     activeModule,
     selectedModules,
     firstAnimalModule,
+    pendingTransfer,
     currentAnimalId,
     isOnline,
     isReturningUser: onboardingCompleted === true,
     hydrated,
-    lastSavedMessage, 
+    lastSavedMessage,
+    isSignedIn,
     farmerName,
     syncStatus,
     onboardingCompleted,
     syncError,
+    updateFarmName,
+    updateFarmerName,
+    acceptTransfer,
+    discardTransfer,
     markDeceased,
     deleteEvent,
     addSelectedModule,

@@ -1,35 +1,53 @@
 "use client";
-
-import { LogOut } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppState, moduleById, modules } from "@/lib/store";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/lib/useToast";
+// import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { IconPaths } from "@/components/ui/IconPaths";
-import { Card } from "@/components/ui/Card";
+import { AnimalListItem } from "@/components/AnimalListItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Toast } from "@/components/ui/Toast";
 
+const NUDGE_KEY = "hb360-signup-nudge-dismissed";
+const NUDGE_SNOOZE_MS = 5 * 24 * 60 * 60 * 1000; 
+
 export default function Dashboard() {
   const router = useRouter();
-  const supabase = createClient();
+  // const supabase = createClient();
   const { toast, showToast } = useToast();
+
 
   const {
     hydrated, animals, activeModule, setActiveModule,
     setCurrentAnimalId, animalsInModule, attentionList,
-    todayCounts, isOnline, farmerName,
+    todayCounts, isOnline, farmerName, isSignedIn,
     syncStatus, onboardingCompleted, syncError, clearSyncError, retrySync,
   } = useAppState();
 
   const [dateLabel, setDateLabel] = useState("—");
-  const [loggingOut, setLoggingOut] = useState(false);
+  // const [loggingOut, setLoggingOut] = useState(false);
+
+  const [nudgeDismissed, setNudgeDismissed] = useState(true); // true until we've checked, so it never flashes
+
+  useEffect(() => {
+    try {
+      const last = Number(localStorage.getItem(NUDGE_KEY) || 0);
+      setNudgeDismissed(!!last && Date.now() - last < NUDGE_SNOOZE_MS);
+    } catch {
+      setNudgeDismissed(false);
+    }
+  }, []);
 
   useEffect(() => {
     setDateLabel(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }));
   }, []);
+
+  useEffect(() => {
+   if (syncStatus === "ready" && onboardingCompleted === false) router.replace("/onboarding/modules");
+  }, [syncStatus, onboardingCompleted, router]);
 
   useEffect(() => {
     if (syncError) { showToast(syncError, "error"); clearSyncError(); }
@@ -55,51 +73,64 @@ export default function Dashboard() {
   }
   if (syncStatus !== "ready" || onboardingCompleted !== true) return splash;
 
+
   const m = moduleById(activeModule);
   const list = animalsInModule(activeModule);
   const flagged = attentionList();
   const counts = todayCounts();
   const firstName = farmerName?.split(" ")[0] || "";
 
+
+  const showNudge = !isSignedIn && animals.length >= 3 && !nudgeDismissed;
+
+  function dismissNudge() {
+    setNudgeDismissed(true);
+    try {
+      localStorage.setItem(NUDGE_KEY, String(Date.now()));
+    } catch {}
+  }
+
   function startRecord() {
+    const active = list.filter((a) => a.status === "active");
     if (list.length === 0) {
-      router.push("/add-animal");
-    } else if (list.length === 1) {
-      setCurrentAnimalId(list[0].id);
+      router.push(`/add-animal?module=${activeModule}`);
+    } else if (active.length === 1) {
+      setCurrentAnimalId(active[0].id);
       router.push("/record");
+    } else if (active.length === 0) {
+      router.push(`/add-animal?module=${activeModule}`);
     } else {
       router.push("/choose-animal");
     }
   }
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      showToast("Could not log out. Please try again.", "error");
-      setLoggingOut(false);
-      return;
-    }
-    localStorage.removeItem("hb360-state");
-    showToast("Logged out successfully.", "success");
-    setTimeout(() => {
-      router.push("/login");
-      router.refresh();
-    }, 800);
-  }
+  // async function handleLogout() {
+  //   setLoggingOut(true);
+  //   const { error } = await supabase.auth.signOut();
+  //   if (error) {
+  //     showToast("Could not log out. Please try again.", "error");
+  //     setLoggingOut(false);
+  //     return;
+  //   }
+  //   localStorage.removeItem("hb360-state");
+  //   showToast("Logged out successfully.", "success");
+  //   setTimeout(() => {
+  //     router.push("/login");
+  //     router.refresh();
+  //   }, 800);
+  // }
 
   return (
     <div className="flex flex-col flex-1 pb-5">
-      <div className="flex items-center justify-between py-4 -mx-1 px-1">
+      <div className="flex items-end justify-end-safe py-4 -mx-1 px-1">
         <button
           type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex items-center justify-center rounded-full p-2 text-text-muted transition hover:bg-surface hover:text-danger disabled:opacity-50"
-          aria-label="Log out"
-          title="Log out"
+          onClick={() => router.push("/settings")}
+          className="flex items-center justify-center rounded-full p-2 text-text-muted transition hover:bg-surface hover:text-text"
+          aria-label="Settings"
+          title="Settings"
         >
-          <LogOut size={21} />
+          <Settings size={23} />
         </button>
         <span />
         <ThemeToggle />
@@ -132,6 +163,23 @@ export default function Dashboard() {
         </button>
       )}
 
+      {showNudge && (
+        <div className="rounded-lg border-2 border-border bg-surface p-3.5 mb-3.5">
+          <p className="font-bold text-[15px] mb-0.5">Keep your records safe</p>
+          <p className="text-[14px] text-text-muted mb-3">
+            Your animals are only saved on this phone. Create an account to keep them online, even if you change phones.
+          </p>
+          <div className="flex items-center gap-5">
+            <button onClick={() => router.push("/signup")} className="text-primary font-bold text-[14px] underline">
+              Create account
+            </button>
+            <button onClick={dismissNudge} className="text-text-muted text-[14px]">
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => router.push("/today")}
         className="flex gap-3 items-start bg-success-bg border-l-4 border-primary rounded-lg p-3.5 mb-3.5 text-left text-text"
@@ -156,11 +204,11 @@ export default function Dashboard() {
           <button
             key={mm.id}
             onClick={() => setActiveModule(mm.id)}
-            className={`flex flex-col items-center gap-1.5 min-w-[64px] px-2 py-2.5 rounded-2xl border-2 text-[13px] font-bold ${
+            className={`flex flex-col items-center gap-1.5 min-w-16 px-2 py-2.5 rounded-2xl border-2 text-[13px] font-bold ${
               activeModule === mm.id ? "text-primary border-primary bg-success-bg" : "text-text-muted border-transparent"
             }`}
           >
-            <IconPaths paths={mm.iconPaths} className="w-[30px] h-[30px]" />
+            <IconPaths paths={mm.iconPaths} className="w-7.5 h-7.5" />
             {mm.label}
           </button>
         ))}
@@ -171,16 +219,7 @@ export default function Dashboard() {
       </div>
 
       {list.slice(0, 2).map((a) => (
-        <Card
-          key={a.id}
-          icon={<IconPaths paths={m.iconPaths} className="w-[30px] h-[30px]" />}
-          title={a.name}
-          subtitle={a.lastFedWhen ? `Fed ${a.lastFedWhen.toLowerCase()}` : "No records yet"}
-          onClick={() => {
-            setCurrentAnimalId(a.id);
-            router.push(`/animals/${a.id}`);
-          }}
-        />
+        <AnimalListItem key={a.id} animal={a} />
       ))}
 
       {list.length === 0 && (
@@ -203,7 +242,7 @@ export default function Dashboard() {
       )}
 
       <button
-        onClick={() => router.push("/add-animal")}
+        onClick={() => router.push(`/add-animal?module=${activeModule}`)}
         className="border-2 border-dashed border-border rounded p-4 text-center text-primary font-bold w-full mb-2.5"
       >
         + Add {list.length ? "another " : ""}
