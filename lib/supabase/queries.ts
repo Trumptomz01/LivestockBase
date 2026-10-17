@@ -3,7 +3,7 @@ import type { Animal, AnimalEvent, LogType, ModuleId } from "@/lib/store";
 
 type EventRow = {
   id: string; animal_id: string; type: string; label: string;
-  when_label: "Today" | "Yesterday"; flag: boolean; created_at: string;
+  when_label: string; flag: boolean; created_at: string;
 };
 type AnimalRow = {
   id: string; farmer_id: string; module: ModuleId; name: string; age_label: string;
@@ -13,7 +13,7 @@ type AnimalRow = {
 
 };
 export type FarmerRow = {
-  id: string; selected_modules: ModuleId[] | null; onboarding_completed: boolean;
+  id: string; selected_modules: ModuleId[] | null; onboarding_completed: boolean; farm_name: string | null;
 };
 
 const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
@@ -40,11 +40,18 @@ function rowToAnimal(r: AnimalRow): Animal {
 export async function fetchFarmer(supabase: SupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from("farmers")
-    .select("id, selected_modules, onboarding_completed")
+    .select("id, selected_modules, onboarding_completed, farm_name")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
   return data as FarmerRow | null;
+}
+
+export async function saveFarmNameRow(supabase: SupabaseClient, userId: string, name: string) {
+  const { data, error } = await supabase
+    .from("farmers").update({ farm_name: name }).eq("id", userId).select("id");
+  if (error) throw error;
+  if (!data?.length) throw new Error("Farmer update affected no rows");
 }
 
 // Scoped by farmer_id in the query itself (and again by RLS).
@@ -144,7 +151,7 @@ export async function ensureFarmer(supabase: SupabaseClient, userId: string): Pr
   const { data, error } = await supabase
     .from("farmers")
     .upsert({ id: userId }, { onConflict: "id", ignoreDuplicates: true })
-    .select("id, selected_modules, onboarding_completed")
+    .select("id, selected_modules, onboarding_completed, farm_name")
     .single();
   if (error) throw error;
   return data as FarmerRow;

@@ -1,10 +1,13 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { SkipSetupButton } from "@/components/SkipSetupButton";
+
 
 export default function Welcome() {
   const router = useRouter();
   return (
     <div className="flex flex-col flex-1 pt-6 pb-5">
+        <SkipSetupButton />
       <div className="flex justify-center py-7">
         <svg width="180" height="120" viewBox="0 0 180 120" fill="none">
           <g stroke="var(--primary)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
@@ -14,11 +17,11 @@ export default function Welcome() {
           </g>
         </svg>
       </div>
-      <h1 className="text-2xl font-bold mb-2">Track your animals, the easy way</h1>
-      <p>Record feeding, health and more — right from your phone, even without internet.</p>
+      <h1 className="text-2xl font-bold mb-2">Welcome to HerdBase</h1>
+      <p>Track your animals, the easy way. Record feeding, health and more — right from your phone, even without internet.</p>
       <div className="mt-auto flex flex-col gap-2.5 pt-4">
-        <button onClick={() => router.push("/signup")} className="w-full cursor-pointer active:scale-98 transition-all py-4 rounded bg-primary text-on-primary font-bold text-[17px]">
-          Get started
+        <button onClick={() => router.push("/onboarding/modules")} className="w-full cursor-pointer active:scale-98 transition-all py-4 rounded bg-primary text-on-primary font-bold text-[17px]">
+          Continue to farm
         </button>
         <button onClick={() => router.push("/login")} className=" cursor-pointer active:scale-98 transition-all hover:border hover rounded text-primary font-bold py-2">
           I already have an account
