@@ -94,7 +94,7 @@ export default function LoginPage() {
           {/* Header */}
           <div className="mb-8 text-center">
             <div className="text-[26px] font-bold text-primary">
-              HerdBase360
+              HerdBase
             </div>
 
             <h1 className="mt-4 text-2xl font-bold">

@@ -1,4 +1,4 @@
-import type { Animal, AnimalEvent, LogType, ModuleId } from "@/lib/store";
+import type { Animal, AnimalEvent, EventType, ModuleId } from "@/lib/store";
 
 export type ProfileData = {
   selectedModules: ModuleId[];
@@ -23,6 +23,6 @@ export interface Repository {
   updateAnimal(id: string, patch: { name?: string; ageLabel?: string }): Promise<void>;
   deleteAnimal(id: string): Promise<void>;
   markDeceased(id: string, cause: string, dateISO: string): Promise<void>;
-  insertEvent(animalId: string, type: LogType, event: AnimalEvent, patch: AnimalStatePatch): Promise<void>;
+  insertEvent(animalId: string, type: EventType, event: AnimalEvent, patch: AnimalStatePatch): Promise<void>;
   deleteEvent(eventId: string): Promise<void>;
 }

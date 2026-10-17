@@ -34,6 +34,7 @@ export async function uploadSnapshot(
     last_fed_when: a.lastFedWhen,
     last_check_when: a.lastCheckWhen,
     attention_flag: a.attentionFlag,
+    start_count: a.startCount ?? 1,
     status: a.status,
     death_cause: a.deathCause,
     death_date: a.deathDate,
@@ -50,6 +51,7 @@ export async function uploadSnapshot(
       type: e.type,
       label: e.label,
       when_label: e.when,
+      count: e.count ?? null, details: e.details ?? null,
       flag: e.flag,
       created_at: e.createdAt ?? new Date(now - i * 1000).toISOString(),
     }))

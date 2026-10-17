@@ -5,7 +5,7 @@ const DB_NAME = "hb360-local";
 const STORE = "kv";
 const KEY = "state";
 
-export type LocalEvent = AnimalEvent & { type: LogType; createdAt?: string };
+export type LocalEvent = AnimalEvent & { createdAt?: string };
 export type LocalAnimal = Omit<Animal, "events"> & { events: LocalEvent[]; createdAt: string };
 export type LocalState = {
   selectedModules: ModuleId[];
@@ -86,11 +86,20 @@ function toAnimal(a: LocalAnimal): Animal {
     name: a.name,
     module: a.module,
     ageLabel: a.ageLabel,
+    startCount: a.startCount ?? 1,
     lastFedWhen: a.lastFedWhen,
     lastCheckWhen: a.lastCheckWhen,
     attentionFlag: a.attentionFlag,
     addedToday: isToday(a.createdAt),
-    events: a.events.map((e) => ({ id: e.id, label: e.label, when: e.when, flag: e.flag })),
+    events: a.events.map((e) => ({
+      id: e.id,
+      type: e.type,
+      label: e.label,
+      when: e.when,
+      flag: e.flag,
+      count: e.count ?? null,
+      details: e.details ?? null,
+    })),
     status: a.status,
     deathCause: a.deathCause,
     deathDate: a.deathDate,

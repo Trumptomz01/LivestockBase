@@ -38,11 +38,26 @@ export function formatWhen(iso: string): string {
   });
 }
 
+export type EventType = LogType | "death" | "birth" | "added" | "removed" | "recount";
+
+export type EventDetails = {
+  cause?: string;    // death: what happened
+  place?: string;    // death: "inside" or "outside" the enclosure
+  killer?: string;   // death: what killed it
+  animal?: string;   // sick: which animal
+  problem?: string;  // sick: what is wrong
+  note?: string;
+  counted?: number;  // recount: the number counted
+};
+
 export type AnimalEvent = {
   id: string;
+  type: EventType;
   label: string;
   when: string;
   flag: boolean;
+  count: number | null;
+  details: EventDetails | null;
 };
 
 export type Animal = {
@@ -58,6 +73,7 @@ export type Animal = {
   status: "active" | "deceased";
   deathCause: string | null;
   deathDate: string | null;
+  startCount : number;
 };
 
 export type LogType = "feeding" | "health" | "breeding" | "weight";
@@ -204,7 +220,7 @@ type AppState = {
   setFirstAnimalModule: (id: ModuleId) => void;
   setCurrentAnimalId: (id: string | null) => void;
   setLastSavedMessage: (msg: string) => void;
-  addAnimal: (name: string, module: ModuleId, ageLabel: string) => Animal;
+  addAnimal: (name: string, module: ModuleId, ageLabel: string, count?: number) => Animal;
   updateAnimal: (id: string, patch: { name?: string; ageLabel?: string }) => Promise<boolean>;
   deleteAnimal: (id: string) => void;
   logEvent: (
@@ -458,7 +474,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function addAnimal(name: string, module: ModuleId, ageLabel: string): Animal {
+  function addAnimal(name: string, module: ModuleId, ageLabel: string, count = 1): Animal {
     const animal: Animal = {
       id: crypto.randomUUID(),
       name,
@@ -472,6 +488,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       status: "active",
       deathCause: null,
       deathDate: null,
+      startCount: count,
     };
     setAnimals((prev) => [...prev, animal]); // functional: safe when called several times in a row
     setActiveModuleState(module);
@@ -548,7 +565,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     // Chain onto the same queue as everything else (so ordering with animal
     // inserts/events is preserved), but keep a handle we can actually await.
-    const task = queueRef.current.then(() => repo.updateAnimal(id, patch));
+    const task = queueRef.current.
+    then(() => repo.updateAnimal(id, patch));
     queueRef.current = task.catch(() => {}); // keep the shared queue alive even if this write fails
 
     try {
@@ -630,9 +648,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const cfg = logTypeConfig[type];
     const label = cfg.eventLabel(primary, amount);
     const isFlag = cfg.flag ? cfg.flag(primary) : false;
-    const event: AnimalEvent = { id: crypto.randomUUID(), label, when, flag: isFlag };
+    const event: AnimalEvent = { id: crypto.randomUUID(), type, label, when, flag: isFlag, count: null, details: null };    
     const before = animals.find((a) => a.id === animalId);
-
     const patch: AnimalStatePatch = {};
     if (type === "feeding") patch.lastFedWhen = when;
     if (type === "health") {

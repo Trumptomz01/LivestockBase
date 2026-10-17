@@ -6,10 +6,10 @@ import { BottomNav } from "../components/ButtonNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  applicationName: "HerdBase360",
-  title: "HerdBase360",
+  applicationName: "AnimalBase",
+  title: "AnimalBase",
   description: "Know your farm, every day.",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "HerdBase" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "AnimalBase" },
   formatDetection: { telephone: false },
   icons: { apple: "/icons/apple-touch-icon.png" },
 };
