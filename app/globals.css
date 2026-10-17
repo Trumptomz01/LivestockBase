@@ -15,6 +15,14 @@
   font-style: normal;
   font-display: swap;
 }
+@layer base {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
 
 /* Raw values — these are what actually change between light and dark. */
 :root {
@@ -54,6 +62,7 @@
    real utility class (bg-primary, text-on-primary, border-border, etc.).
    "inline" means Tailwind reads the *current* value of each var (so it
    still responds live when .dark toggles) instead of baking in a constant. */
+   
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
