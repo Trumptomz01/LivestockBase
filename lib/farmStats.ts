@@ -1,5 +1,6 @@
 import { modules, todayISO } from "@/lib/store";
 import type { Animal } from "@/lib/store";
+import { aliveCount, sickCount } from "@/lib/group";
 
 export type Period = "week" | "month" | "year" | "all";
 
@@ -35,15 +36,18 @@ export function farmStats(animals: Animal[], period: Period) {
   const today = todayISO();
   const inPeriod = (iso: string | null) => !!iso && iso <= today && (start === null || iso >= start);
 
-  const alive = animals.filter((a) => a.status === "active");
   return {
-    alive: alive.length,
-    attention: alive.filter((a) => a.attentionFlag).length,
+    alive: animals.reduce((n, a) => n + aliveCount(a), 0),
+    attention: animals.reduce((n, a) => n + sickCount(a), 0),
     died: animals.filter((a) => a.status === "deceased" && inPeriod(a.deathDate)).length,
     births: animals.reduce(
       (n, a) => n + a.events.filter((e) => e.label.endsWith("Gave birth") && inPeriod(e.when)).length,
       0
     ),
-    byType: modules.map((m) => ({ id: m.id, label: m.label, count: alive.filter((a) => a.module === m.id).length })),
+    byType: modules.map((m) => ({
+      id: m.id,
+      label: m.label,
+      count: animals.filter((a) => a.module === m.id).reduce((n, a) => n + aliveCount(a), 0),
+    })),
   };
 }

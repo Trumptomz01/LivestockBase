@@ -1,22 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAppState, moduleById, formatWhen, todayISO, deathCauseSuggestions } from "@/lib/store";
+import { aliveCount, sickCount, isGroup } from "../../../lib/group";
 import { TopBar } from "@/components/ui/TopBar";
 import { IconPaths } from "@/components/ui/IconPaths";
 import { Chip } from "@/components/ui/Chip";
+import { Sheet } from "@/components/ui/Sheet";
 
 const VISIBLE_COUNT = 3;
 
-function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+function StatBox({ value, label, alert = false }: { value: number; label: string; alert?: boolean }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-surface rounded-t-2xl p-5 pb-6 max-h-[90vh] overflow-y-auto">
-        <div className="w-10 h-1.5 rounded-full bg-border mx-auto mb-4" />
-        {children}
-      </div>
+    <div className={`rounded-xl border p-3 text-center ${alert ? "bg-flag-bg border-flag/40" : "bg-surface border-border"}`}>
+      <div className={`text-[30px] font-bold leading-none ${alert ? "text-flag" : ""}`}>{value}</div>
+      <div className="text-[13px] text-text-muted mt-1.5">{label}</div>
     </div>
   );
 }
@@ -36,7 +34,7 @@ export default function AnimalProfile() {
   // delete
   const [confirmDeleteAnimal, setConfirmDeleteAnimal] = useState(false);
   const [confirmDeleteEventId, setConfirmDeleteEventId] = useState<string | null>(null);
-  // deceased
+  // deceased (single animals only)
   const [showDeathForm, setShowDeathForm] = useState(false);
   const [deathCause, setDeathCause] = useState("");
   const [customCause, setCustomCause] = useState("");
@@ -60,6 +58,10 @@ export default function AnimalProfile() {
 
   const m = moduleById(animal.module);
   const deceased = animal.status === "deceased";
+  const group = isGroup(animal);
+  const alive = aliveCount(animal);
+  const sick = sickCount(animal);
+  const closed = deceased || alive === 0; // nothing left to record for
   const visibleEvents = showAllEvents ? animal.events : animal.events.slice(0, VISIBLE_COUNT);
 
   function openEdit() {
@@ -89,13 +91,27 @@ export default function AnimalProfile() {
     <div className="flex flex-col flex-1 pb-5 relative">
       <TopBar />
       <div className="flex flex-col items-center text-center pt-2 pb-2.5">
-        <div className="w-22 h-22 rounded-full bg-surface-2 flex items-center justify-center mb-3 text-secondary">
+        <div className="w-[88px] h-[88px] rounded-full bg-surface-2 flex items-center justify-center mb-3 text-secondary">
           <IconPaths paths={m.iconPaths} className="w-12 h-12" />
         </div>
         <h1 className="text-2xl font-bold mb-0">{animal.name}</h1>
-        <p>{m.label} · {animal.ageLabel}</p>
+        <p>
+          {m.label}
+          {group ? " group" : ""} · {animal.ageLabel}
+        </p>
         {deceased && <p className="mt-1 text-[14px] font-bold text-text-muted">Deceased</p>}
       </div>
+
+      {group && (
+        <>
+          <div className="grid grid-cols-3 gap-2.5 mt-1">
+            <StatBox value={alive} label="Alive" />
+            <StatBox value={sick} label="Sick" alert={sick > 0} />
+            <StatBox value={alive - sick} label="Healthy" />
+          </div>
+          <p className="text-center text-[13px] text-text-muted mt-2 mb-1">Started with {animal.startCount}</p>
+        </>
+      )}
 
       <div className="flex justify-between py-3.5 border-b border-border text-[15px]">
         <span className="text-text-muted">Last fed</span>
@@ -136,7 +152,7 @@ export default function AnimalProfile() {
                 <b className="block text-[15px]">{e.label}</b>
                 <span className="text-[14px] text-text-muted">{formatWhen(e.when)}</span>
               </div>
-              {!deceased && (
+              {!closed && (
                 <button
                   onClick={() => setConfirmDeleteEventId(e.id)}
                   className="text-text-muted text-[13px] underline shrink-0"
@@ -166,9 +182,10 @@ export default function AnimalProfile() {
       )}
 
       <div className="mt-auto pt-4 flex flex-col gap-2.5">
-        {deceased ? (
+        {closed ? (
           <p className="text-center text-[14px] text-text-muted">
-            This animal is marked deceased. You can still see its past records above.
+            {group ? "No animals are left in this group." : "This animal is marked deceased."} You can still see its
+            past records above.
           </p>
         ) : (
           <>
@@ -176,11 +193,13 @@ export default function AnimalProfile() {
               Record for {animal.name}
             </button>
             <button onClick={openEdit} className="text-primary font-bold py-2">Edit details</button>
-            <button onClick={() => setShowDeathForm(true)} className="text-text-muted font-bold py-2">
-              Mark as deceased
-            </button>
+            {!group && (
+              <button onClick={() => setShowDeathForm(true)} className="text-text-muted font-bold py-2">
+                Mark as deceased
+              </button>
+            )}
             <button onClick={() => setConfirmDeleteAnimal(true)} className="text-danger font-bold py-2">
-              Delete animal
+              {group ? "Delete group" : "Delete animal"}
             </button>
           </>
         )}
@@ -224,13 +243,19 @@ export default function AnimalProfile() {
                 key={c}
                 label={c}
                 selected={deathCause === c}
-                onClick={() => { setDeathCause(c); setCustomCause(""); }}
+                onClick={() => {
+                  setDeathCause(c);
+                  setCustomCause("");
+                }}
               />
             ))}
           </div>
           <input
             value={customCause}
-            onChange={(e) => { setCustomCause(e.target.value); if (e.target.value) setDeathCause(""); }}
+            onChange={(e) => {
+              setCustomCause(e.target.value);
+              if (e.target.value) setDeathCause("");
+            }}
             placeholder="Or write it yourself"
             className="w-full p-4 text-[16px] rounded border-2 border-border bg-surface-2 text-text mb-4"
           />
@@ -262,7 +287,9 @@ export default function AnimalProfile() {
       {confirmDeleteAnimal && (
         <Sheet onClose={() => setConfirmDeleteAnimal(false)}>
           <h2 className="text-xl font-bold mb-2">Delete {animal.name}?</h2>
-          <p className="text-text-muted mb-5">This removes {animal.name} and all their records. This can&apos;t be undone.</p>
+          <p className="text-text-muted mb-5">
+            This removes {animal.name} and all its records. This can&apos;t be undone.
+          </p>
           <div className="flex gap-2.5">
             <button onClick={() => setConfirmDeleteAnimal(false)} className="flex-1 py-4 rounded border-2 border-border font-bold text-[16px]">
               Cancel

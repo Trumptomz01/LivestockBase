@@ -26,7 +26,7 @@ function ModulesInner() {
   useEffect(() => {
     if (onboardingCompleted === true) return;
     if (searchParams.get("confirmed") === "true") {
-      showToast("Email confirmed! Continue setting up HerdBase360.", "success");
+      showToast("Email confirmed! Continue setting up AnimalBase", "success");
       // Remove the query parameter after showing the toast
       router.replace("/onboarding/modules");
     }

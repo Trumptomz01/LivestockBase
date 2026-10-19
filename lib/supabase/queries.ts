@@ -1,13 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Animal, AnimalEvent, LogType, ModuleId } from "@/lib/store";
+import type { Animal, AnimalEvent, EventDetails, EventType, ModuleId } from "@/lib/store";
 
 type EventRow = {
   id: string; animal_id: string; type: string; label: string;
   when_label: string; flag: boolean; created_at: string;
+  count: number | null; details: EventDetails | null;
 };
 type AnimalRow = {
   id: string; farmer_id: string; module: ModuleId; name: string; age_label: string;
-  last_fed_when: string | null; last_check_when: string | null;
+  last_fed_when: string | null; last_check_when: string | null; start_count: number | null;
   attention_flag: boolean; created_at: string; animal_events: EventRow[] | null;
   status: "active" | "deceased"; death_cause: string | null; death_date: string | null;
 
@@ -27,9 +28,10 @@ function rowToAnimal(r: AnimalRow): Animal {
     lastFedWhen: r.last_fed_when,
     lastCheckWhen: r.last_check_when,
     attentionFlag: r.attention_flag,
+    startCount: r.start_count ?? 1,
     addedToday: isToday(r.created_at),
     events: (r.animal_events ?? []).map(
-      (e): AnimalEvent => ({ label: e.label, id: e.id, when: e.when_label, flag: e.flag })
+      (e): AnimalEvent => ({ label: e.label, type:e.type as EventType, count: e.count, id: e.id, when: e.when_label, flag: e.flag, details: e.details, })
     ),
     status: r.status,
     deathCause: r.death_cause,
@@ -71,6 +73,7 @@ export async function insertAnimal(supabase: SupabaseClient, userId: string, a: 
     id: a.id,
     farmer_id: userId,
     module: a.module,
+    start_count: a.startCount,
     name: a.name,
     age_label: a.ageLabel,
     last_fed_when: null,
@@ -117,12 +120,12 @@ export async function markAnimalDeceasedRow(
 
 export async function insertEventAndUpdateAnimal(
   supabase: SupabaseClient, userId: string, animalId: string,
-  type: LogType, event: AnimalEvent,
+  type: EventType, event: AnimalEvent,
   animalPatch: { last_fed_when?: string; last_check_when?: string; attention_flag?: boolean }
 ) {
   const ins = await supabase.from("animal_events").insert({
     id: event.id,
-    animal_id: animalId, type, label: event.label, when_label: event.when, flag: event.flag,
+    animal_id: animalId, type, count: event.count, details: event.details, label: event.label, when_label: event.when, flag: event.flag,
   });
   if (ins.error) throw ins.error;
 
