@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useAppState, moduleById } from "@/lib/store";
+import { aliveCount, sickCount, isGroup } from "@/lib/group";
 import { Card } from "@/components/ui/Card";
 import { IconPaths } from "@/components/ui/IconPaths";
 
@@ -26,7 +27,7 @@ export default function Attention() {
               key={a.id}
               icon={<IconPaths paths={m.iconPaths} className="w-[30px] h-[30px]" />}
               title={a.name}
-              subtitle="Needs a health check"
+              subtitle={isGroup(a) ? `${sickCount(a)} sick out of ${aliveCount(a)}` : "Needs a health check"}
               onClick={() => {
                 setCurrentAnimalId(a.id);
                 router.push(`/animals/${a.id}`);

@@ -28,3 +28,37 @@ export function healthyCount(a: Animal): number {
 export function isGroup(a: Animal): boolean {
   return a.startCount > 1;
 }
+
+/** What was fed last time, so the feeding form can start filled in. */
+export function lastFeeding(a: Animal): { feed: string; amount: number | null } | null {
+  const e = a.events.find((x) => x.type === "feeding"); // newest first
+  if (!e) return null;
+  if (e.details?.feed) return { feed: e.details.feed, amount: e.details.amount ?? null };
+  const m = e.label.match(/^Fed — (.+?)(?: \(([\d.]+)kg\))?$/); // older records only have the label
+  return m ? { feed: m[1], amount: m[2] ? Number(m[2]) : null } : null;
+}
+
+/** Short extra line shown under a record, built from its details. */
+export function eventDetailText(e: AnimalEvent): string | null {
+  const d = e.details;
+  if (!d) return null;
+  const parts: string[] = [];
+  if (e.type === "death") {
+    if (d.place) parts.push(d.place === "outside" ? "Outside the enclosure" : "Inside the enclosure");
+    if (d.killer) parts.push(d.killer);
+  }
+  if (e.type === "health") {
+    if (d.animal) parts.push(d.animal);
+    if (d.problem) parts.push(d.problem);
+  }
+  if (e.type === "recount" && d.counted !== undefined) parts.push(`Counted ${d.counted}`);
+    if (e.type === "treatment") {
+    if (d.dose) parts.push(d.dose);
+    if (d.withdrawalDays) parts.push(`Wait ${d.withdrawalDays} days before selling meat or milk`);
+  }
+  
+  if (d.note) parts.push(d.note);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export const animalHref = (id: string) => `/animal?id=${id}`;

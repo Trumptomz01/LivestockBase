@@ -35,6 +35,15 @@ const tabs: { href: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    href: "/health",
+    label: "Health",
+    icon: (
+      <Icon>
+        <path d="M20.8 8.6c0 5-8.8 10.4-8.8 10.4S3.2 13.6 3.2 8.6a4.6 4.6 0 018.8-1.9 4.6 4.6 0 018.8 1.9z" />
+      </Icon>
+    ),
+  },
+  {
     href: "/settings",
     label: "You",
     icon: (
@@ -73,7 +82,7 @@ export function BottomNav() {
     return () => clearTimeout(t);
   }, [pending]);
 
-  // Only the three main screens get the bar, not the add/record/onboarding flows.
+  // Only the main screens get the bar, not the add/record/onboarding flows.
   if (!tabs.some((t) => t.href === pathname)) return null;
 
   // Move the highlight as soon as a tab is tapped, without waiting for the page to load.
@@ -87,7 +96,7 @@ export function BottomNav() {
 
       <nav
         aria-label="Main"
-        className="fixed left-1/2 z-40 w-68 -translate-x-1/2"
+        className="fixed left-1/2 z-40 w-[20rem] -translate-x-1/2"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
       >
         <div className="relative rounded-full border border-border/60 bg-surface/70 p-1 shadow-lg backdrop-blur-xl backdrop-saturate-150">
@@ -100,24 +109,24 @@ export function BottomNav() {
               transform: `translateX(${index * 100}%)`,
             }}
           />
-         <ul className="relative flex items-center">
-               {tabs.map((t) => (
-               <li key={t.href} className="flex-1">
-                  <Link
-                     href={t.href}
-                     replace
-                     onClick={() => setPending(t.href)}
-                     aria-current={pathname === t.href ? "page" : undefined}
-                     className={`flex flex-col items-center gap-0.5 rounded-full py-1.5 text-[11px] font-bold transition-colors duration-300 active:scale-95 ${
-                     current === t.href ? "text-primary" : "text-text-muted"
-                     }`}
-                  >
-                     {t.icon}
-                     {t.label}
-                  </Link>
-               </li>
-               ))}
-            </ul>
+          <ul className="relative flex items-center">
+            {tabs.map((t) => (
+              <li key={t.href} className="flex-1">
+                <Link
+                  href={t.href}
+                  replace
+                  onClick={() => setPending(t.href)}
+                  aria-current={pathname === t.href ? "page" : undefined}
+                  className={`flex flex-col items-center gap-0.5 rounded-full py-1.5 text-[11px] font-bold transition-colors duration-300 active:scale-95 ${
+                    current === t.href ? "text-primary" : "text-text-muted"
+                  }`}
+                >
+                  {t.icon}
+                  {t.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </nav>
     </>

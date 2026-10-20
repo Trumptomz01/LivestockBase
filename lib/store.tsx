@@ -1,5 +1,5 @@
 "use client";
-
+import { aliveCount, sickCount } from "@/lib/group";
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createSupabaseRepo } from "@/lib/data/supabaseRepo";
@@ -38,7 +38,9 @@ export function formatWhen(iso: string): string {
   });
 }
 
-export type EventType = LogType | "death" | "birth" | "added" | "removed" | "recount";
+export type EventType = LogType | "death" | "birth" | "added" | "removed" | "recount" | "treatment" | "vaccination";
+export type GroupEventType = "health" | "death" | "birth" | "added" | "removed" | "recount" | "treatment" | "vaccination";
+
 
 export type EventDetails = {
   cause?: string;    // death: what happened
@@ -48,6 +50,13 @@ export type EventDetails = {
   problem?: string;  // sick: what is wrong
   note?: string;
   counted?: number;  // recount: the number counted
+  feed?: string;     // feeding: what they ate
+  amount?: number;   // feeding: how much
+  unit?: string;     // feeding: kg
+  medicine?: string;       // treatment: what was given
+  dose?: string;           // treatment: how much
+  withdrawalDays?: number; // treatment: days to wait before selling meat or milk
+  nextDue?: string; 
 };
 
 export type AnimalEvent = {
@@ -228,8 +237,19 @@ type AppState = {
     type: LogType,
     primary: string | null,
     amount: number | null,
-    whenISO: string
+    whenISO: string,
+    details?: EventDetails | null
   ) => AnimalEvent;
+
+  recordGroupEvent: (input: {
+    animalId: string;
+    type: GroupEventType;
+    count: number;
+    when: string;
+    label: string;
+    flag?: boolean;
+    details?: EventDetails | null;
+  }) => AnimalEvent;
 
   saveSelectedModules: () => Promise<boolean>;
   completeOnboarding: () => Promise<boolean>;
@@ -638,34 +658,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  function logEvent(
-    animalId: string,
-    type: LogType,
-    primary: string | null,
-    amount: number | null,
-    when: string
-  ): AnimalEvent {
-    const cfg = logTypeConfig[type];
-    const label = cfg.eventLabel(primary, amount);
-    const isFlag = cfg.flag ? cfg.flag(primary) : false;
-    const event: AnimalEvent = { id: crypto.randomUUID(), type, label, when, flag: isFlag, count: null, details: null };    
+    // Adds one record: the screen updates at once, it saves in the background,
+  // and the change is undone if the save fails.
+  function applyEvent(animalId: string, event: AnimalEvent, patch: AnimalStatePatch): AnimalEvent {
     const before = animals.find((a) => a.id === animalId);
-    const patch: AnimalStatePatch = {};
-    if (type === "feeding") patch.lastFedWhen = when;
-    if (type === "health") {
-      patch.lastCheckWhen = when;
-      patch.attentionFlag = isFlag;
-    }
 
     setAnimals((prev) =>
       prev.map((a) => {
         if (a.id !== animalId) return a;
         const updated: Animal = { ...a, events: [event, ...a.events] };
-        if (type === "feeding") updated.lastFedWhen = when;
-        if (type === "health") {
-          updated.lastCheckWhen = when;
-          updated.attentionFlag = isFlag;
-        }
+        if (patch.lastFedWhen !== undefined) updated.lastFedWhen = patch.lastFedWhen;
+        if (patch.lastCheckWhen !== undefined) updated.lastCheckWhen = patch.lastCheckWhen;
+        if (patch.attentionFlag !== undefined) updated.attentionFlag = patch.attentionFlag;
         return updated;
       })
     );
@@ -690,8 +694,56 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       rollback();
       return event;
     }
-    enqueue(() => repo.insertEvent(animalId, type, event, patch), rollback);
+    enqueue(() => repo.insertEvent(animalId, event.type, event, patch), rollback);
     return event;
+  }
+
+  function logEvent(
+    animalId: string,
+    type: LogType,
+    primary: string | null,
+    amount: number | null,
+    when: string,
+    details: EventDetails | null = null
+  ): AnimalEvent {
+    const cfg = logTypeConfig[type];
+    const label = cfg.eventLabel(primary, amount);
+    const isFlag = cfg.flag ? cfg.flag(primary) : false;
+    const event: AnimalEvent = { id: crypto.randomUUID(), type, label, when, flag: isFlag, count: null, details };
+
+    const patch: AnimalStatePatch = {};
+    if (type === "feeding") patch.lastFedWhen = when;
+    if (type === "health") {
+      patch.lastCheckWhen = when;
+      patch.attentionFlag = isFlag;
+    }
+    return applyEvent(animalId, event, patch);
+  }
+
+  function recordGroupEvent(input: {
+    animalId: string;
+    type: GroupEventType;
+    count: number;
+    when: string;
+    label: string;
+    flag?: boolean;
+    details?: EventDetails | null;
+  }): AnimalEvent {
+    const event: AnimalEvent = {
+      id: crypto.randomUUID(),
+      type: input.type,
+      label: input.label,
+      when: input.when,
+      flag: input.flag ?? false,
+      count: input.count,
+      details: input.details ?? null,
+    };
+    const patch: AnimalStatePatch = {};
+    if (input.type === "health") {
+      patch.lastCheckWhen = input.when;
+      patch.attentionFlag = input.count > 0;
+    }
+    return applyEvent(input.animalId, event, patch);
   }
 
   async function saveSelectedModules(): Promise<boolean> {
@@ -724,15 +776,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   function getAnimal(id: string) {
     return animals.find((a) => a.id === id);
   }
-  function attentionList() {
-    return animals.filter((a) => a.attentionFlag && a.status === "active");
+   function attentionList() {
+    return animals.filter((a) => sickCount(a) > 0);
   }
   function todayCounts() {
     const today = todayISO();
-    const fed = animals.filter((a) => a.events.some((e) => e.label.startsWith("Fed") && e.when === today)).length;
-    const health = animals.filter((a) => a.events.some((e) => e.label.startsWith("Health check") && e.when === today)).length;
-    const attention = animals.filter((a) => a.attentionFlag && a.status === "active").length;
-    const newToday = animals.filter((a) => a.addedToday).length;
+    const didToday = (a: Animal, type: EventType) => a.events.some((e) => e.type === type && e.when === today);
+    const fed = animals.filter((a) => didToday(a, "feeding")).reduce((n, a) => n + aliveCount(a), 0);
+    const health = animals.filter((a) => didToday(a, "health")).reduce((n, a) => n + aliveCount(a), 0);
+    const attention = animals.reduce((n, a) => n + sickCount(a), 0);
+    const newToday = animals.filter((a) => a.addedToday).reduce((n, a) => n + a.startCount, 0);
     return { fed, health, attention, newToday };
   }
 
@@ -743,6 +796,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     selectedModules,
     firstAnimalModule,
     pendingTransfer,
+    recordGroupEvent,
     currentAnimalId,
     isOnline,
     isReturningUser: onboardingCompleted === true,

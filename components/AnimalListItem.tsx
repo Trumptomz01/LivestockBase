@@ -17,7 +17,13 @@ function statusTag(a: Animal) {
   return { label: "Active", cls: "bg-success-bg text-primary" };
 }
 
-export function AnimalListItem({ animal }: { animal: Animal }) {
+export function AnimalListItem({
+  animal,
+  mode = "profile",
+}: {
+  animal: Animal;
+  mode?: "profile" | "record";
+}) {
   const router = useRouter();
   const { setCurrentAnimalId } = useAppState();
   const m = moduleById(animal.module);
@@ -42,7 +48,7 @@ export function AnimalListItem({ animal }: { animal: Animal }) {
       subtitle={subtitle}
       onClick={() => {
         setCurrentAnimalId(animal.id);
-        router.push(`/animals/${animal.id}`);
+        router.push(mode === "record" ? "/record" : `/animals/${animal.id}`);
       }}
       badge={
         <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-bold ${tag.cls}`}>

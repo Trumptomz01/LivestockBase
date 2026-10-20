@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAppState, moduleById, modules } from "@/lib/store";
+import { useAppState, moduleById, modules, todayISO } from "@/lib/store";
 import { aliveCount, sickCount } from "../../lib/group";
 import { useToast } from "@/lib/useToast";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { IconPaths } from "@/components/ui/IconPaths";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { activeWithdrawals } from "@/lib/health";
 import { Toast } from "@/components/ui/Toast";
 import { AnimalListItem } from "@/components/AnimalListItem";
 import { Settings } from "lucide-react";
@@ -75,6 +76,8 @@ export default function Dashboard() {
   const totalAlive = list.reduce((n, a) => n + aliveCount(a), 0);
   const sickGroups = animals.filter((a) => sickCount(a) > 0);
   const totalSick = animals.reduce((n, a) => n + sickCount(a), 0);
+  const farmAlive = animals.reduce((n, a) => n + aliveCount(a), 0);
+  const waiting = animals.filter((a) => aliveCount(a) > 0).flatMap((a) => activeWithdrawals(a, todayISO()));
   const counts = todayCounts();
   const firstName = farmerName?.split(" ")[0] || "";
   const showNudge = !isSignedIn && animals.length >= 3 && !nudgeDismissed;
@@ -100,7 +103,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col flex-1 pb-5">
-      <div className="flex pt-2 items-start">
+      <div className="flex pt-4 items-start justify-between gap-2.5">
         <div>
           <h1 className="text-2xl tracking-wide leading-7 font-semibold mb-0.5">
             Good morning{firstName ? `, ${firstName}` : ""}
@@ -126,17 +129,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <h1 className="text-2xl font-bold mb-0.5">
-        Good morning{firstName ? `, ${firstName}` : ""}
-      </h1>
-      <p className="mb-0.5 text-text-muted">{dateLabel}</p>
-      <p className="mb-3.5 text-[13px] text-text-muted">
-        {isOnline ? "Online — connected" : "Offline — saved on this phone, will sync later"}
-      </p>
-
       {totalSick > 0 && (
         <button
-          onClick={() => router.push("/attention")}
+          onClick={() => router.push("/health")}
           className="flex gap-3 items-start bg-flag-bg border-l-4 border-flag rounded-lg p-3.5 mb-3 text-left text-text"
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-flag shrink-0 mt-0.5">
@@ -154,6 +149,33 @@ export default function Dashboard() {
                 : `${sickGroups[0].name} and ${sickGroups.length - 1} more`}
             </span>
           </div>
+        </button>
+      )}
+
+      {waiting.length > 0 && (
+        <button
+          onClick={() => router.push("/health")}
+          className="flex gap-3 items-start bg-flag-bg border-l-4 border-flag rounded-lg p-3.5 mb-3 text-left text-text w-full"
+        >
+          <div>
+            <strong className="block text-[15px]">
+              {waiting.length} treatment{waiting.length > 1 ? "s" : ""} still in a waiting period
+            </strong>
+            <span className="text-[14px] text-text-muted">Do not sell meat or milk yet. See details.</span>
+          </div>
+        </button>
+      )}
+
+      {totalSick === 0 && farmAlive > 0 && (
+        <button
+          onClick={() => router.push("/health")}
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3.5 mb-3.5 text-left text-text"
+        >
+          <div>
+            <strong className="block text-[15px]">Animal health</strong>
+            <span className="text-[14px] text-text-muted">All {farmAlive} animals look healthy</span>
+          </div>
+          <span className="text-[13px] text-primary font-bold shrink-0">See details</span>
         </button>
       )}
 

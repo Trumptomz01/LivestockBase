@@ -112,9 +112,9 @@ export default function Farm() {
           value={stats.attention}
           label="Need attention"
           alert={stats.attention > 0}
-          onClick={stats.attention > 0 ? () => router.push("/attention") : undefined}
+          onClick={stats.attention > 0 ? () => router.push("/health") : undefined}
         />
-        <Stat value={stats.died} label={`Died ${phrase}`} />
+        <Stat onClick={() => router.push("/health")} value={stats.died} label={`Died ${phrase}`} />
         <Stat value={stats.births} label={`Births recorded ${phrase}`} />
       </div>
 
