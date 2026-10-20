@@ -21,7 +21,7 @@ function localISO(d: Date) {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-function periodStartISO(period: Period): string | null {
+export function periodStartISO(period: Period): string | null {
   const today = todayISO();
   if (period === "all") return null;
   if (period === "year") return `${today.slice(0, 4)}-01-01`;
@@ -36,14 +36,31 @@ export function farmStats(animals: Animal[], period: Period) {
   const today = todayISO();
   const inPeriod = (iso: string | null) => !!iso && iso <= today && (start === null || iso >= start);
 
+  const died = animals.reduce((n, a) => {
+    const fromRecords = a.events
+      .filter((e) => e.type === "death" && inPeriod(e.when))
+      .reduce((s, e) => s + (e.count ?? 0), 0);
+    const legacy = a.status === "deceased" && inPeriod(a.deathDate) ? 1 : 0; // older single-animal records
+    return n + fromRecords + legacy;
+  }, 0);
+
+  const births = animals.reduce(
+    (n, a) =>
+      n +
+      a.events.reduce((s, e) => {
+        if (!inPeriod(e.when)) return s;
+        if (e.type === "birth") return s + (e.count ?? 0);
+        if (e.type === "breeding" && e.label.endsWith("Gave birth")) return s + 1; // older records
+        return s;
+      }, 0),
+    0
+  );
+
   return {
     alive: animals.reduce((n, a) => n + aliveCount(a), 0),
     attention: animals.reduce((n, a) => n + sickCount(a), 0),
-    died: animals.filter((a) => a.status === "deceased" && inPeriod(a.deathDate)).length,
-    births: animals.reduce(
-      (n, a) => n + a.events.filter((e) => e.label.endsWith("Gave birth") && inPeriod(e.when)).length,
-      0
-    ),
+    died,
+    births,
     byType: modules.map((m) => ({
       id: m.id,
       label: m.label,

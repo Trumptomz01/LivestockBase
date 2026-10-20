@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAppState, moduleById, formatWhen, todayISO, deathCauseSuggestions } from "@/lib/store";
-import { aliveCount, sickCount, isGroup } from "../../../lib/group";
+import { aliveCount, sickCount, isGroup, eventDetailText } from "@/lib/group";
 import { TopBar } from "@/components/ui/TopBar";
 import { IconPaths } from "@/components/ui/IconPaths";
 import { Chip } from "@/components/ui/Chip";
@@ -150,6 +150,7 @@ export default function AnimalProfile() {
               <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${e.flag ? "bg-flag" : "bg-primary"}`} />
               <div className="flex-1">
                 <b className="block text-[15px]">{e.label}</b>
+                {eventDetailText(e) && <span className="block text-[13px] text-text-muted">{eventDetailText(e)}</span>}
                 <span className="text-[14px] text-text-muted">{formatWhen(e.when)}</span>
               </div>
               {!closed && (
