@@ -56,9 +56,9 @@ export function eventDetailText(e: AnimalEvent): string | null {
     if (d.dose) parts.push(d.dose);
     if (d.withdrawalDays) parts.push(`Wait ${d.withdrawalDays} days before selling meat or milk`);
   }
-  
+
   if (d.note) parts.push(d.note);
   return parts.length ? parts.join(" · ") : null;
 }
 
-export const animalHref = (id: string) => `/animal?id=${id}`;
+export const animalHref = (id: string) => `/animals/${id}`;
