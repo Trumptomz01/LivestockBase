@@ -99,11 +99,11 @@ export function BottomNav() {
         className="fixed left-1/2 z-40 w-[20rem] -translate-x-1/2"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
       >
-        <div className="relative rounded-full border border-border/60 bg-surface/70 p-1 shadow-lg backdrop-blur-xl backdrop-saturate-150">
+        <div className="relative rounded-full border border-border/40 bg-surface/40 p-1 shadow-lg backdrop-blur-[3px]  backdrop-saturate-120">
           {/* The highlight that slides between tabs */}
           <div
             aria-hidden
-            className="absolute bottom-1 left-1 top-1 rounded-full bg-success-bg transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
+            className="absolute bottom-1 left-1 top-1 rounded-full bg-success-bg/20 border-border/50 backdrop-blur   transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
             style={{
               width: `calc((100% - 0.5rem) / ${tabs.length})`,
               transform: `translateX(${index * 100}%)`,
@@ -117,8 +117,8 @@ export function BottomNav() {
                   replace
                   onClick={() => setPending(t.href)}
                   aria-current={pathname === t.href ? "page" : undefined}
-                  className={`flex flex-col items-center gap-0.5 rounded-full py-1.5 text-[11px] font-bold transition-colors duration-300 active:scale-95 ${
-                    current === t.href ? "text-primary" : "text-text-muted"
+                  className={`flex flex-col items-center gap-0.5 rounded-full py-1.5 text-[12px] font-bold transition-colors duration-300 active:scale-95 ${
+                    current === t.href ? "text-primary" : "text-text/60"
                   }`}
                 >
                   {t.icon}
